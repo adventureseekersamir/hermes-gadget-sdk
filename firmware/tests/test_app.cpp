@@ -10976,7 +10976,7 @@ TEST("hero fill: the colour face is 376 px, and the idle screen shows it without
   CHECK_EQ(lit_in_bottom(r.fake, 16), size_t(0));
 }
 
-TEST("hero fill: the face keeps its size and place while a reply's status and hint show") {
+TEST("hero fill: the face keeps its size and place while a status and hint show, and a reply shows as text") {
   Rig r(fill_profile());
   make_206(r, true);
   r.bring_online(true);
@@ -10986,16 +10986,24 @@ TEST("hero fill: the face keeps its size and place while a reply's status and hi
   const Box idle = box_of(r.fake, kRose);
   r.server(R"({"type":"turn.start","turn":"a1"})");
   r.server(R"({"type":"status","text":"Searching the web"})");
+  r.advance(100);
+  // The status screen keeps the face: same size and place, with the status under it.
+  CHECK(r.app.screen() == hg::Screen::Thinking);
+  CHECK(r.app.model().hero);
+  CHECK_EQ(r.app.model().detail, std::string("Searching the web"));
+  CHECK(!r.app.model().hint.empty());  // and the bottom bar its hint
+  const Box thinking = box_of(r.fake, kRose);
+  CHECK_EQ(thinking.x0, idle.x0);
+  CHECK_EQ(thinking.y0, idle.y0);
+  CHECK_EQ(thinking.w(), 376);
+  CHECK_EQ(thinking.h(), 376);
+  CHECK(lit_in_bottom(r.fake, 16) > 0);
+  // Reply text that is not being spoken shows as text in place of the face, as on stock firmware.
   r.server(R"({"type":"reply.delta","turn":"a1","text":"It is sunny and warm all afternoon today"})");
   r.advance(100);
   CHECK(r.app.screen() == hg::Screen::Responding);
-  CHECK(!r.app.model().detail.empty());  // the reply's text still shows under the face
-  CHECK(!r.app.model().hint.empty());    // and the bottom bar its hint
-  const Box talking = box_of(r.fake, kRose);
-  CHECK_EQ(talking.x0, idle.x0);
-  CHECK_EQ(talking.y0, idle.y0);
-  CHECK_EQ(talking.w(), 376);
-  CHECK(lit_in_bottom(r.fake, 16) > 0);
+  CHECK(!r.app.model().hero);
+  CHECK(!r.app.model().body.empty());
   r.server(R"({"type":"reply","turn":"a1","text":"It is sunny."})");
   r.server(R"({"type":"turn.end","turn":"a1","outcome":"success"})");
   r.advance(200);
