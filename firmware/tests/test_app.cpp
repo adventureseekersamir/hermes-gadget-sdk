@@ -91,6 +91,7 @@ struct FakeHal : hg::Display, hg::AudioIn, hg::AudioOut, hg::Transport, hg::Stor
   bool round = false;
   uint8_t font_scale = 1;
   bool emissive = false;
+  bool hero_fill = false;
   bool backlight = false;
   int brightness = 0, volume = 0;
   std::vector<uint16_t> fb = std::vector<uint16_t>(320 * 240, 0);
@@ -103,6 +104,7 @@ struct FakeHal : hg::Display, hg::AudioIn, hg::AudioOut, hg::Transport, hg::Stor
     d.round = round;
     d.font_scale = font_scale;
     d.emissive = emissive;
+    d.hero_fill = hero_fill;
     d.has_backlight = backlight;
     return d;
   }
@@ -10901,4 +10903,113 @@ TEST("interpret: an owner's notice and working-state phrase are gone when the mo
   r.advance(20);
   CHECK(r.app.model().detail.find("bank") == std::string::npos);
   CHECK(r.app.model().body.find("bank") == std::string::npos);
+}
+
+// --------------------------------------------------------------------------
+// Hero fill (DisplayInfo::hero_fill, the thoth-big-face branch): on the AMOLED 2.06's 410x486
+// UI area the colour face is 376 px on every hero screen, and the idle screen shows it alone.
+
+namespace {
+
+struct Box {
+  int x0 = 1 << 30, y0 = 1 << 30, x1 = -1, y1 = -1;  // [x0, x1) x [y0, y1)
+  int w() const { return x1 - x0; }
+  int h() const { return y1 - y0; }
+};
+
+Box box_of(const FakeHal& f, uint16_t v) {
+  Box b;
+  for (int y = 0; y < f.height; ++y)
+    for (int x = 0; x < f.width; ++x)
+      if (f.fb[static_cast<size_t>(y * f.width + x)] == v) {
+        b.x0 = std::min(b.x0, x);
+        b.y0 = std::min(b.y0, y);
+        b.x1 = std::max(b.x1, x + 1);
+        b.y1 = std::max(b.y1, y + 1);
+      }
+  return b;
+}
+
+// Lit pixels in the panel's last `rows` rows (an emissive panel's background is 0).
+size_t lit_in_bottom(const FakeHal& f, int rows) {
+  size_t n = 0;
+  for (int y = f.height - rows; y < f.height; ++y)
+    for (int x = 0; x < f.width; ++x) n += f.fb[static_cast<size_t>(y * f.width + x)] != 0;
+  return n;
+}
+
+hg::DeviceProfile fill_profile() {
+  hg::DeviceProfile p = Rig::touch_profile();
+  p.colour_face_alloc = std::malloc;
+  return p;
+}
+
+void make_206(Rig& r, bool fill) {
+  r.fake.make_panel(410, 486, false);
+  r.fake.emissive = true;
+  r.fake.hero_fill = fill;
+}
+
+}  // namespace
+
+TEST("hero fill: the colour face is 376 px, and the idle screen shows it without greeting or hint bar") {
+  Rig r(fill_profile());
+  make_206(r, true);
+  r.bring_online(true);
+  CHECK_EQ(colour_px(r), 376);
+  r.advance(100);
+  send_colour_face(r, "default", "big", 376, kRose);
+  r.advance(100);
+  CHECK(r.app.model().face && r.app.model().face->hash == "big");
+  CHECK(r.app.screen() == hg::Screen::Ready);
+  CHECK(r.app.model().hero);
+  CHECK(r.app.model().headline.empty());
+  CHECK(r.app.model().detail.empty());
+  CHECK(r.app.model().hint.empty());
+  // Drawn 1:1: every pixel of the ring shows, in a 376 px square centred across the panel.
+  CHECK_EQ(count_px(r.fake.fb, kRose), static_cast<size_t>(376 * 376 - 188 * 188));
+  const Box idle = box_of(r.fake, kRose);
+  CHECK_EQ(idle.w(), 376);
+  CHECK_EQ(idle.h(), 376);
+  CHECK_EQ(idle.x0, (410 - 376) / 2);
+  // No hint bar: nothing lit in the bottom bar's rows.
+  CHECK_EQ(lit_in_bottom(r.fake, 16), size_t(0));
+}
+
+TEST("hero fill: the face keeps its size and place while a reply's status and hint show") {
+  Rig r(fill_profile());
+  make_206(r, true);
+  r.bring_online(true);
+  r.advance(100);
+  send_colour_face(r, "default", "big", 376, kRose);
+  r.advance(100);
+  const Box idle = box_of(r.fake, kRose);
+  r.server(R"({"type":"turn.start","turn":"a1"})");
+  r.server(R"({"type":"status","text":"Searching the web"})");
+  r.server(R"({"type":"reply.delta","turn":"a1","text":"It is sunny and warm all afternoon today"})");
+  r.advance(100);
+  CHECK(r.app.screen() == hg::Screen::Responding);
+  CHECK(!r.app.model().detail.empty());  // the reply's text still shows under the face
+  CHECK(!r.app.model().hint.empty());    // and the bottom bar its hint
+  const Box talking = box_of(r.fake, kRose);
+  CHECK_EQ(talking.x0, idle.x0);
+  CHECK_EQ(talking.y0, idle.y0);
+  CHECK_EQ(talking.w(), 376);
+  CHECK(lit_in_bottom(r.fake, 16) > 0);
+  r.server(R"({"type":"reply","turn":"a1","text":"It is sunny."})");
+  r.server(R"({"type":"turn.end","turn":"a1","outcome":"success"})");
+  r.advance(200);
+  CHECK(r.app.screen() == hg::Screen::Ready);
+  CHECK_EQ(r.app.model().body, std::string("It is sunny."));  // the reply, shown as text
+}
+
+TEST("hero fill: off by default, so other boards keep the greeting and the stock face size") {
+  Rig r(fill_profile());
+  make_206(r, false);
+  r.bring_online(true);
+  CHECK(colour_px(r) <= 192);
+  r.advance(100);
+  CHECK(r.app.screen() == hg::Screen::Ready);
+  CHECK_EQ(r.app.model().headline, std::string("Hi, I'm Hermes"));
+  CHECK_EQ(r.app.model().hint, std::string("Hold the screen to talk"));
 }

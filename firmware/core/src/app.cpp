@@ -394,7 +394,7 @@ void App::begin() {
   add_face_actions();   // face.set
   if (hal_.display) ui_ = std::make_unique<Ui>(*hal_.display);
   if (ui_ && profile_.faces && profile_.colour_face_alloc && !colour_) {
-    const int px = std::min(256, ui_->face_px());
+    const int px = std::min(512, ui_->face_px());  // 376 with hero fill on the AMOLED 2.06
     const size_t row = static_cast<size_t>(px) * 2;
     // The picture and half as many rows again for its bands; else the picture alone, which stays still.
     colour_.reset(static_cast<uint16_t*>(profile_.colour_face_alloc(row * static_cast<size_t>(px + px / 2))));
@@ -3214,6 +3214,13 @@ void App::update_model() {
         m.detail = tr(Msg::Interpreter);
         m.name_target = false;
         m.caption_lines = 1;
+      }
+      // Hero fill: the face alone, without the greeting, its cue line or the hint bar. A running
+      // timer, the interpreter and a profile to pick keep their caption; a flashed hint still shows.
+      if (ui_ && ui_->hero_fill() && !timing && !switching && !interpret_) {
+        m.headline.clear();
+        m.detail.clear();
+        m.hint.clear();
       }
     } else if (interpret_) {
       m.headline = interpret_label_;

@@ -158,6 +158,7 @@ struct AmoledConfig {
   bool round = false;
   uint8_t corner_inset = 0;  // extra top-bar padding for rounded corners (hg::DisplayInfo)
   AmoledPanel panel = AmoledPanel::Co5300_466;
+  bool hero_fill = false;  // the colour face fills the hero area; idle shows it alone (hg::DisplayInfo)
 };
 
 struct I2cBusConfig {

@@ -39,6 +39,10 @@ struct DisplayInfo {
   // An OLED/AMOLED panel: unlit pixels draw no power, so the background is
   // true black instead of the near-black used on backlit LCDs.
   bool emissive = false;
+  // Hero fill: a colour face is drawn as large as the hero area allows (one fixed size on
+  // every hero screen, not the mascot's 64/96/144/192 steps), and the idle screen shows the
+  // face alone, without the greeting lines or the hint bar.
+  bool hero_fill = false;
 };
 
 // An RGB565 framebuffer owned by the port (PSRAM on hardware). On a board that

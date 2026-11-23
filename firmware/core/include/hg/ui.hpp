@@ -266,7 +266,10 @@ class Ui {
   int choice_row_hit(const UiModel& m, int x, int y) const;
   // The largest size the Ready screen draws the face at (one caption line, no name panel): a colour face
   // is sent at this size and scaled down where there is less room.
-  int face_px() const { return hero_geom(UiModel{}).size; }
+  // With hero fill (DisplayInfo::hero_fill) it is the fill size instead: the face is sent at that.
+  int face_px() const { return fill_px_ ? fill_px_ : hero_geom(UiModel{}).size; }
+  // Hero fill is on (DisplayInfo::hero_fill): the idle screen shows the face alone.
+  bool hero_fill() const { return panel_.hero_fill; }
   // Whether the face stays above its smallest size with two caption lines under it: where a spoken
   // reply's latest lines caption the talking face.
   bool talk_caption_fits() const;
@@ -350,6 +353,9 @@ class Ui {
   Rect settings_bar(const UiModel& m) const;
   ProfileGrid profile_grid(const UiModel& m) const;
   int touch_px_ = 0;
+  // Hero fill: the one size a colour face is drawn at on every hero screen (0: off). The largest
+  // multiple of 8 that fits the hero area's width and its height under two caption lines.
+  int fill_px_ = 0;
   void draw_bottom(Canvas& c, const UiModel& m);
   void draw_indicator(Canvas& c, const UiModel& m, int cx, int cy, int r);
   // Draws the battery icon and percent from x, vertically centred on cy.

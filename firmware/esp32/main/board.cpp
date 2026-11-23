@@ -347,6 +347,7 @@ BoardConfig make() {
   // rows 10-24, needs ~57 px at its top row; 64 plus the bar's 6 px pad leaves some to spare.
   b.amoled.corner_inset = 64;
   b.amoled.panel = AmoledPanel::Co5300_410;
+  b.amoled.hero_fill = true;  // thoth-big-face: a 376 px colour face, and an idle screen with the face alone
   b.i2c = {15, 14, 400000};
   b.codec.enabled = true;
   b.codec.mclk = 16;

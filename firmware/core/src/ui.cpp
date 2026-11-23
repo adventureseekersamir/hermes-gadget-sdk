@@ -274,10 +274,12 @@ mascot::Frame mascot_frame(const UiModel& m) {
 }
 
 // `b` (from mascot::pick) in `ink`, or the colour face at b's size, in b's frame.
-void draw_face(Canvas& c, int x, int y, const mascot::Bitmap& b, const mascot::Face* face, uint16_t ink) {
+// `size`, when set, is the size a colour face is drawn at (hero fill); else the bitmap's.
+void draw_face(Canvas& c, int x, int y, const mascot::Bitmap& b, const mascot::Face* face, uint16_t ink,
+               int size = 0) {
   if (face && face->rgb565) {
     const mascot::Band& band = face->band(b.frame);
-    c.picture(x, y, b.size, face->rgb565, face->px, band.rgb565, band.y, band.rows);
+    c.picture(x, y, size ? size : b.size, face->rgb565, face->px, band.rgb565, band.y, band.rows);
   } else {
     c.bitmap1(x, y, b.size, b.size, b.bits, ink);
   }
@@ -399,6 +401,13 @@ Ui::Ui(Display& display)
 
   // Hero layout: the mascot is sized per screen (see hero_geom).
   layout_.hero_cols = cols_for(w - 4 * s, s);
+  if (panel_.hero_fill) {
+    // A colour face at one size on every hero screen, with room for a two-line caption under it
+    // (a spoken reply's): the same arithmetic as hero_geom's, with no buttons.
+    const int lh = Canvas::line_height(s);
+    const int caption2 = 3 * lh + s;
+    fill_px_ = std::max(0, std::min(w - 8 * s, layout_.main_h - caption2 - 4 * s)) / 8 * 8;
+  }
   // The headline is centred, so keeping clear of the marker on the right costs the same on the left.
   layout_.name_cols = cols_for(2 * (name_marker_x() - s) - w, s);
   if (panel_.round) {
@@ -649,7 +658,7 @@ void Ui::draw_frame(const UiModel& m) {
     content.val(m.grid).val(m.face_row).val(m.mascot_row).val(m.settings_row).add(m.face ? m.face->hash : std::string())
         .val(m.thumbs_rev).val(m.thumbs.size());
   hashes[2] = content.get();
-  hashes[3] = Hash().add(m.hint).get();
+  hashes[3] = Hash().add(m.hint).val(panel_.hero_fill && m.hero && m.screen == Screen::Ready).get();  // draw_bottom's bare
 
   if (m.hero) {
     // Hero mode: top bar, one mascot band, bottom bar.
@@ -1792,7 +1801,14 @@ Ui::HeroGeom Ui::hero_geom(const UiModel& m) const {
   const int avail = std::min(w - 8 * s, layout_.main_h - ch - buttons_h - 4 * s);
   const int limit = panel_.mascot_px ? std::min(avail, static_cast<int>(panel_.mascot_px)) : avail;
   g.size = mascot::pick(limit, mascot::Frame::Idle)->size;
-  const int block = g.size + 2 * s + ch + buttons_h;
+  int block = g.size + 2 * s + ch + buttons_h;
+  if (fill_px_ && m.face && m.face->rgb565) {
+    // Hero fill: the colour face keeps one size and place on every hero screen, so it never
+    // moves as captions come and go. Only answer buttons, or a caption longer than two lines,
+    // make it smaller (Canvas::picture scales it down).
+    g.size = std::max(1, std::min(fill_px_, avail));
+    block = buttons_h || g.size < fill_px_ ? g.size + 2 * s + ch + buttons_h : fill_px_ + 2 * s + caption_h(2);
+  }
   g.x = (w - g.size) / 2;
   g.y = layout_.main_y + std::max(s, (layout_.main_h - block) / 2);
   g.caption_y = g.y + g.size + 2 * s;
@@ -1929,7 +1945,7 @@ void Ui::draw_hero(Canvas& c, const UiModel& m) {
   const int size = g.size, mx = g.x, my = g.y;
   const mascot::Anchors& a = mascot::anchors(m.face);
   const mascot::Bitmap b = mascot::pick(size, mascot_frame(m), m.face);
-  draw_face(c, mx, my, b, m.face, kText);
+  draw_face(c, mx, my, b, m.face, kText, fill_px_ ? size : 0);
   const int stroke = std::max(2, size / 48);
   auto waves = [&](int cx, int cy, int dir, int lit, int phase, uint16_t on, uint16_t dim, int r0) {
     for (int i = 0; i < 3; ++i) {
@@ -2002,7 +2018,9 @@ void Ui::draw_hero(Canvas& c, const UiModel& m) {
 void Ui::draw_bottom(Canvas& c, const UiModel& m) {
   const int s = layout_.scale;
   const int y0 = info_.height - layout_.bottom_h;
-  c.fill_rect(0, y0, info_.width, layout_.bottom_h, panel_.round ? bg_ : kBar);
+  // Hero fill's idle screen has no hint: no bar either, the face alone on the background.
+  const bool bare = panel_.hero_fill && m.hero && m.screen == Screen::Ready && m.hint.empty();
+  c.fill_rect(0, y0, info_.width, layout_.bottom_h, panel_.round || bare ? bg_ : kBar);
   std::string hint = fit(m.hint, cols_for(info_.width - 4 * s, s));
   c.text((info_.width - Canvas::text_width(hint, s)) / 2, y0 + s, hint, s, kDim);
 }
