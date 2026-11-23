@@ -457,7 +457,7 @@ class DeviceSession:
         faces = self.caps.get("faces")
         if isinstance(faces, dict) and type(faces.get("v")) is int and faces["v"] >= 2:
             px = faces.get("px")
-            if type(px) is int and 1 <= px <= 256:
+            if type(px) is int and 1 <= px <= 512:  # thoth-big-face: 376 px with hero fill
                 return px
         return 0
 

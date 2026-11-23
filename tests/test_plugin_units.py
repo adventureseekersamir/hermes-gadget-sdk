@@ -476,7 +476,8 @@ class _MediaWire(_Wire):
         self.sent.append(raw if isinstance(raw, bytes) else json.loads(raw))
 
 
-@pytest.mark.parametrize("faces, px", [(1, 0), ({"v": 2, "px": 144}, 144), ({"v": 2, "px": 999}, 0),
+@pytest.mark.parametrize("faces, px", [(1, 0), ({"v": 2, "px": 144}, 144), ({"v": 2, "px": 376}, 376),
+                                       ({"v": 2, "px": 512}, 512), ({"v": 2, "px": 513}, 0), ({"v": 2, "px": 999}, 0),
                                        ({"v": 2, "px": True}, 0), ({"v": 2}, 0), (None, 0)])
 def test_a_device_says_whether_it_draws_faces_and_at_what_size(faces, px):
     from hermes_gadget_plugin.hub import DeviceSession
